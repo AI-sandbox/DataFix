@@ -2,7 +2,7 @@
 
 ![DataFix diagram](images/DataFix.png)
 
-This repository contains a python implementation of **DataFix**, a framework which explores using the principles of adversarial learning, where the information from several discriminators trained to distinguish between two distributions is used to both detect the corrupted features and fix them in order to remove the distribution shift between a reference dataset and a query dataset. The reference dataset is assumed to contain high-quality data, while the query dataset may contain corrupted features that introduce a distribution shift.
+This repository contains a Python implementation of **DataFix**, a framework that uses the principles of adversarial learning, where the information from several discriminators trained to distinguish between two distributions is used to both detect the corrupted features and fix them in order to remove the distribution shift between a reference dataset and a query dataset. The reference dataset is assumed to contain high-quality data, while the query dataset may contain corrupted features that introduce a distribution shift.
 
 DataFix consists of two systems: ***DF-Locate***, which localizes the features causing the distribution shift, and ***DF-Correct***, which modifies the query samples in order to reduce the distribution shift between the two datasets.
 
@@ -259,4 +259,19 @@ from datafix import DFCorrect
 
 datafix_correct = DFCorrect()
 datafix_correct.fit_transform(reference, query)
+```
+
+## Citation
+
+If you find this code useful in your research, please kindly cite our paper (arxiv(https://openreview.net/forum?id=lBhRTO2uWf)) via:
+
+> Barrabés, M., Montserrat, D. M., Geleta, M., Giró-i-Nieto, X., & Ioannidis, A. G. (2023, November). Adversarial Learning for Feature Shift Detection and Correction. In Thirty-seventh Conference on Neural Information Processing Systems. 
+
+```bibtext
+@inproceedings{barrabes2023adversarial,
+  title={Adversarial Learning for Feature Shift Detection and Correction},
+  author={Barrab{\'e}s, M{\'\i}riam and Montserrat, Daniel Mas and Geleta, Margarita and Gir{\'o}-i-Nieto, Xavier and Ioannidis, Alexander G},
+  booktitle={Thirty-seventh Conference on Neural Information Processing Systems},
+  year={2023}
+}
 ```
