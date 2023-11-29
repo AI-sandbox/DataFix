@@ -263,7 +263,7 @@ datafix_correct.fit_transform(reference, query)
 
 ## Citation
 
-If you find this code useful in your research, please kindly cite our paper (arxiv(https://openreview.net/forum?id=lBhRTO2uWf)) via:
+If you find this code useful in your research, please kindly cite our paper ([arxiv](https://openreview.net/forum?id=lBhRTO2uWf)) via:
 
 > Barrabés, M., Montserrat, D. M., Geleta, M., Giró-i-Nieto, X., & Ioannidis, A. G. (2023, November). Adversarial Learning for Feature Shift Detection and Correction. In Thirty-seventh Conference on Neural Information Processing Systems. 
 
