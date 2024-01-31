@@ -261,6 +261,10 @@ datafix_correct = DFCorrect()
 datafix_correct.fit_transform(reference, query)
 ```
 
+## License
+
+This project is under the CC BY-NC 4.0 license. See [LICENSE](LICENSE) for details.
+
 ## Citation
 
 If you find this code useful in your research, please kindly cite our paper ([arxiv](https://openreview.net/forum?id=lBhRTO2uWf)) via:

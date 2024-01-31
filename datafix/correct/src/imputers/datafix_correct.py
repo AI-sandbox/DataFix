@@ -11,10 +11,7 @@ from sklearn.impute import KNNImputer
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import cross_val_predict
 
-from ..divergences.discriminator_divergence_estimator import (
-    div_multiple_clf, 
-    div_tv_clf
-)
+from ..divergences.discriminator_divergence_estimator import div_tv_clf
 from .supervised_imputer import SupervisedImputer
 
 

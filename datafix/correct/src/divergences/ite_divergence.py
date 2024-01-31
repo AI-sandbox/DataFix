@@ -1,4 +1,3 @@
-import numpy as np
 import time
 
 import ite.cost as ic

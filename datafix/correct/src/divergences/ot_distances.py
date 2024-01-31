@@ -1,7 +1,5 @@
 import ot
-import numpy as np
 import torch
-import time
 
 
 def ot_dist(reference, query):

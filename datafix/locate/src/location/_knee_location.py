@@ -9,7 +9,7 @@ import warnings
 from kneed import KneeLocator
 from numpy import ndarray
 from scipy.interpolate import UnivariateSpline
-from typing import List, Union
+from typing import List
 
 
 def _interpolate(x: List[int], y: List[float]):
