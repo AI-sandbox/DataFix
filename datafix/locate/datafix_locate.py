@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from joblib import Parallel, delayed
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 from numpy import ndarray
 from pandas import DataFrame
 from scipy.signal import savgol_filter
@@ -53,7 +53,7 @@ class DFLocate:
         information about feature importance through a ``coef_`` attribute or a
         ``feature_importances_`` attribute. The default estimator is
         `RandomForestClassifier` with a random state of 0.
-    cv : None, int, str, or an iterable, default=None
+    cv : None, int, str, or an iterable, default=5
         Determines the cross-validation splitting strategy.
         Possible inputs for ``cv`` are:
         - None, to use the default single stratified train/test split
@@ -74,7 +74,7 @@ class DFLocate:
         - ``D1``: log(p1) + log(1-p0).
         - ``D2``: log(p1 / p0).
         - ``D3``: -log((1/p0) - 1).
-    n_jobs : int, default=None
+    n_jobs : int, default=-1
         Number of jobs to run in parallel. None means 1, unless in a
         joblib.parallel_backend context. -1 means using all processors.
     return_estimator : bool, default=False
@@ -126,7 +126,7 @@ class DFLocate:
         Maximum number of iterations without improvement in balanced accuracy.
         None means balanced accuracy is not used as a stop condition, except
         if ``margin`` is not None.
-    random_state : None or int, default=None
+    random_state : None or int, default=0
         Controls randomness by passing an integer for reproducible output.
     find_best : None or 'knee-balanced', default='knee-balanced'
         If 'knee-balanced', the optimal number of features to eliminate is
@@ -134,7 +134,7 @@ class DFLocate:
         accuracy of the estimator vs the number of removed features. None means
         the algorithm does not search for the optimal iteration; instead, it 
         returns the last iteration as the optimal one.
-    window_length : None or int, default=5
+    window_length : None or int, default=2
         Useful only when ``find_best`` == 'knee-balanced'. Used to determine the
         length of the filter window for Savitzky-Golay filter. The window length
         is computed as: `max(5, (delta*window_length)//2*2+1)`, where delta is
@@ -177,13 +177,13 @@ class DFLocate:
     corrupted_features_ : list of length (n_iters_)
         Total number (cummulative) of features detected as being corrupted at
         each ``shift_location()`` iteration.
-    mask_ : list of length (n_features_in_)
+    mask_ : array of shape (n_features_in_,)
         The mask of corrupted features, where 1 indicates a variable is
         corrupted and 0 otherwise.
-    ranking_ : list of length (n_features_in_)
+    ranking_ : array of shape (n_features_in_,)
         The iteration number when each feature is detected as being corrupted.
         Features not identified as corrupted at any iteration have zero value.
-    importances_ : list of length (n_features_in_)
+    importances_ : array of shape (n_features_in_,)
         The normalized importance of a feature at the iteration when it is
         detected as being corrupted. The normalized importance is averaged
         over all folds. Features not identified as corrupted at any iteration
@@ -206,10 +206,10 @@ class DFLocate:
     def __init__(
         self,
         estimator=RandomForestClassifier(random_state=0),
-        cv=None,
+        cv=5,
         test_size=0.2,
         scoring="balanced_accuracy",
-        n_jobs=1,
+        n_jobs=-1,
         return_estimator=False,
         step=None,
         percentage=0.1,
@@ -224,7 +224,7 @@ class DFLocate:
         polyorder=4,
         S=5,
         online=False,
-        random_state=None,
+        random_state=0,
         verbose=False
     ):
         self.estimator = estimator
@@ -528,7 +528,8 @@ class DFLocate:
         self.runtime_.append(end_time - start_time)
 
         if self.verbose:
-            print(f"balanced_acc={self.scores_['mean_test_balanced_accuracy'][-1]}")
+            tvd = max(0, 2*self.scores_['mean_test_balanced_accuracy'][-1]-1)
+            print(f"tvd={tvd:<13.10f}")
         
         return self
 
@@ -682,10 +683,11 @@ class DFLocate:
             self.n_iters_ += 1
             
             if self.verbose:
+                tvd = max(0, 2*balanced_accuracy-1)
                 print(
-                    f"iteration={self.n_iters_} |",
-                    f"balanced_acc={balanced_accuracy} |",
-                    f"corrupted_features={detected_features}"
+                    f"iteration={self.n_iters_:<7} |",
+                    f"tvd={tvd:<13.10f} |",
+                    f"corrupted_features={detected_features:<10}"
                 )
 
             # Update stop condition
@@ -697,7 +699,7 @@ class DFLocate:
             iteration_end_time = time.time()
             self.runtime_.append(iteration_end_time - iteration_start_time)
 
-        if self.find_best == "knee-balanced":
+        if self.find_best == "knee-balanced" and self.n_iters_ > 1:
             # Find optimal iteration from the curve with the balanced
             # accuracy of the estimator vs the number of removed features
             self.knee_location(
@@ -706,6 +708,17 @@ class DFLocate:
                 S=self.S,
                 online=self.online,
             )
+        else:
+            # Make a copy of attributes needed for plotting
+            self.plot_ = {}
+            self.plot_["corrupted_features"] = self.corrupted_features_
+            self.plot_["mean_test_balanced_accuracy"] = self.scores_[
+                "mean_test_balanced_accuracy"
+            ]
+            self.plot_["mean_test_balanced_accuracy_smooth"] = self.scores_[
+                "mean_test_balanced_accuracy"
+            ]
+            self.warning_knee_ = ""
 
         return self
 
@@ -740,19 +753,6 @@ class DFLocate:
         self.polyorder = polyorder
         self.S = S
         self.online = online
-
-        if self.n_iters_ == 1:
-            # Make a copy of attributes needed for plotting
-            self.plot_ = {}
-            self.plot_["corrupted_features"] = self.corrupted_features_
-            self.plot_["mean_test_balanced_accuracy"] = self.scores_[
-                "mean_test_balanced_accuracy"
-            ]
-            self.plot_["mean_test_balanced_accuracy_smooth"] = self.scores_[
-                "mean_test_balanced_accuracy"
-            ]
-            self.warning_knee_ = ""
-            return self
 
         # Compute the mean distance between the points in ``corrupted_features_``
         delta = self.corrupted_features_[-1] / (self.n_iters_ - 1)
@@ -839,7 +839,7 @@ class DFLocate:
         """
         def fmt(x, pos):
             return f"{int(x)}\n{round(x/self.n_features_in_*100, 1)}%"
-
+        
         # Set plot size and background color
         plt.figure(figsize=(25, 15))
         plt.rcParams["figure.facecolor"] = "white"
@@ -855,26 +855,39 @@ class DFLocate:
 
         # Plot curves with the original and smoothed balanced accuracy vs
         # the number of corrupted features removed
+        mean_test_tvd = [max(0, 2*x-1) for x in self.plot_["mean_test_balanced_accuracy"]]
+        
         plt.plot(
             self.plot_["corrupted_features"],
-            self.plot_["mean_test_balanced_accuracy"],
+            mean_test_tvd,
             markersize=6,
             linewidth=4.0,
             marker="o",
             alpha=1,
             color="#1f77b4",
-            label="Balanced Accuracy",
+            label="TVD",
         )
-        plt.plot(
-            self.plot_["corrupted_features"],
-            self.plot_["mean_test_balanced_accuracy_smooth"],
-            markersize=6,
-            linewidth=4.0,
-            marker="o",
-            alpha=1,
-            color="darkorange",
-            label="Smoothed Balanced Accuracy",
-        )
+        
+        if self.find_best == "knee-balanced":
+            mean_test_tvd_smooth = [max(0, 2*x-1) for x in self.plot_["mean_test_balanced_accuracy_smooth"]]
+            plt.plot(
+                self.plot_["corrupted_features"],
+                mean_test_tvd_smooth,
+                markersize=6,
+                linewidth=4.0,
+                marker="o",
+                alpha=1,
+                color="darkorange",
+                label="Smoothed TVD",
+            )
+            
+            plt.axvline(
+                x=self.n_corrupted_features_,
+                linewidth=6.0,
+                ls="--",
+                color="black",
+                label="Knee",
+            )
 
         # Plot the F1 score in the corrupted feature localization if provided
         if f1_score is not None:
@@ -889,23 +902,15 @@ class DFLocate:
                 label="F1 Score",
             )
 
-        plt.axvline(
-            x=self.n_corrupted_features_,
-            linewidth=6.0,
-            ls="--",
-            color="black",
-            label="Knee",
-        )
-
         # Add x and y axis labels
         plt.xlabel("\nRemoved Features", labelpad=-30)
-        plt.ylabel("\nBalanced Accuracy", labelpad=10)
         plt.yticks([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
         ax = plt.gca()
+        ax.xaxis.set_major_locator(MaxNLocator(integer=True))
         ax.xaxis.set_major_formatter(FuncFormatter(fmt))
-
+        
         # Plot legend and grid
-        plt.legend(loc="lower right", fontsize=32)
+        plt.legend(loc="upper right", fontsize=32)
         plt.grid()
         plt.show()
         plt.close()

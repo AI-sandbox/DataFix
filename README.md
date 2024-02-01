@@ -2,21 +2,21 @@
 
 ![DataFix diagram](images/DataFix.png)
 
-This repository contains a Python implementation of **DataFix**, a framework that uses the principles of adversarial learning, where the information from several discriminators trained to distinguish between two distributions is used to both detect the corrupted features and fix them in order to remove the distribution shift between a reference dataset and a query dataset. The reference dataset is assumed to contain high-quality data, while the query dataset may contain corrupted features that introduce a distribution shift.
+This repository contains a Python implementation of **DataFix**, a framework rooted in adversarial learning principles that leverages multiple discriminators trained to distinguish between two distributions to detect and fix corrupted features in order to remove the distribution shift between a **reference** dataset and a **query** dataset. The reference dataset is assumed to contain high-quality data, while the query dataset may contain corrupted features that introduce a distribution shift.
 
 DataFix consists of two systems: ***DF-Locate***, which localizes the features causing the distribution shift, and ***DF-Correct***, which modifies the query samples in order to reduce the distribution shift between the two datasets.
 
-## Installalation
+## Installation
 
 The library can be installed using pip:
 
-```
+```console
 $ pip install git+https://github.com/AI-sandbox/DataFix.git
 ```
 
 To obtain a local copy of this Git repository, navigate to the desired folder and run the following command in the Command Line Interface (CLI):
 
-```
+```console
 $ git clone https://github.com/AI-sandbox/Datafix.git
 ```
 
@@ -24,7 +24,7 @@ $ git clone https://github.com/AI-sandbox/Datafix.git
 
 All the dependencies are listed in the `requirements.txt`. They can be installed via pip:
 
-```
+```console
 $ cd datafix
 $ pip3 install -r requirements.txt
 ```
@@ -41,7 +41,7 @@ estimator : ``Estimator`` instance, default=RandomForestClassifier(random_state=
     information about feature importance through a ``coef_`` attribute or a
     ``feature_importances_`` attribute. The default estimator is
     `RandomForestClassifier` with a random state of 0.
-cv : None, int, str, or an iterable, default=None
+cv : None, int, str, or an iterable, default=5
     Determines the cross-validation splitting strategy.
     Possible inputs for ``cv`` are:
     - None, to use the default single stratified train/test split
@@ -62,7 +62,7 @@ scoring : str or list, default='balanced_accuracy'.
     - ``D1``: log(p1) + log(1-p0).
     - ``D2``: log(p1 / p0).
     - ``D3``: -log((1/p0) - 1).
-n_jobs : int, default=None
+n_jobs : int, default=-1
     Number of jobs to run in parallel. None means 1, unless in a
     joblib.parallel_backend context. -1 means using all processors.
 return_estimator : bool, default=False
@@ -130,7 +130,7 @@ window_length : None or int, default=5
 polyorder : None or int, default=4
     Useful only when ``find_best`` == 'knee-balanced'. The polyorder used to
     fit the samples for Savitzky-Golay filter.
-S : None or int, default=7
+S : None or int, default=5
     Useful only when ``find_best`` == 'knee-balanced'. Sensitity for knee
     location. It is a measure of how many “flat” points are expected in
     the unmodified data curve before declaring a knee.  If the algorithm
@@ -167,13 +167,13 @@ runtime_ : list of length (n_iters_)
 corrupted_features_ : list of length (n_iters_)
     Total number (cummulative) of features detected as being corrupted at
     each ``shift_location()`` iteration.
-mask_ : list of length (n_features_in_)
+mask_ : array of shape (n_features_in_,)
     The mask of corrupted features, where 1 indicates a variable is
     corrupted and 0 otherwise.
-ranking_ : list of length (n_features_in_)
+ranking_ : array of shape (n_features_in_,)
     The iteration number when each feature is detected as being corrupted.
     Features not identified as corrupted at any iteration have zero value.
-importances_ : list of length (n_features_in_)
+importances_ : array of shape (n_features_in_,)
     The normalized importance of a feature at the iteration when it is
     detected as being corrupted. The normalized importance is averaged
     over all folds. Features not identified as corrupted at any iteration
@@ -196,29 +196,43 @@ n_samples_query_ : int
 
 ### Usage
 
-```
+Following, we create an instance of **DFLocate** with the default parameters.
+
+```python
 from datafix import DFLocate
 
 datafix_locate = DFLocate()
 ```
 
-The ``shift_detection()`` method can be used to identify if there is a distribution shift between a reference dataset and a query dataset. First, an estimator is fit as a discriminator to distinguish between samples from the reference or the query. Then, the discriminator is evaluated on the test samples to determine if there is a divergence:
+The `shift_detection()` method can be used to identify if there is a distribution shift between a reference dataset and a query dataset. First, a discriminator is fit to distinguish between samples from the reference or the query. Then, the discriminator is evaluated on the test samples to determine if there is a divergence:
 
-```
+```python
 datafix_locate = datafix_locate.shift_detection(reference, query)
 ```
 
-The ``shift_location()`` method can be used to iteratively localize the corrupted features in the query that cause a distribution shift between the query and the reference datasets.
+The `shift_location()` method can be used to iteratively localize the corrupted features in the query dataset that contribute to the distribution shift between the query and the reference datasets. Accessing the ***mask*** of corrupted features is straightforward, where 1 indicates a variable is corrupted and 0 indicates it is not.
 
-```
+```python
 datafix_locate = datafix_locate.shift_location(reference, query)
+```
+
+As a result, the ***mask*** of corrupted features is stored, where 1 indicates a variable is corrupted and 0 indicates it is not.
+
+```python
 print("Mask of corrputed features:")
 print(datafix_locate.mask_)
 ```
 
-The ``plot_evolution()`` method can be used to plot the evolution curve of balanced accuracy and smoothed balanced accuracy versus the number of corrupted features removed. It can also plot the iteration or knee with the correct number of corrupted features. Additionally, it can optionally plot the F1 score curve.
+Another attribute worth noting is the ***ranking***, which indicates the iteration number at which each feature is identified as corrupted. Features that are not corrupted are assigned a value of zero.
 
+```python
+print("Ranking of corrputed features:")
+print(datafix_locate.ranking_)
 ```
+
+The `plot_evolution()` method can be used to plot the evolution curve of the ***Total Variation Divergence (TVD)*** versus the number of corrupted features removed. Additionally, when `find_best='knee-balanced'`, it also plots the iteration or knee with the correct number of corrupted features and the smoothed TVD from which the knee is identified.
+
+```python
 datafix.plot_evolution()
 ```
 
@@ -229,8 +243,6 @@ datafix.plot_evolution()
 ### Parameters
 
 ```
-num_corrupted_feats : int
-    Total number of corrupted features.
 base_classifier : object, default=CatBoostClassifier(verbose=False, random_state=0)
     The base classifier used as discriminator.
 batch_size : int, default=5000
@@ -245,21 +257,30 @@ verbose : bool, default=False
 
 ### Returns
 
-```
+```python
 query : array-like
     Query with corrected features.
 ```
 
 ### Usage
 
-The ``fit_transform()`` method can be used to correct the corrupted features detected by DF-Locate.
+Following, we create an instance of **DFCorrect** with the default parameters.
 
-```
+```python
 from datafix import DFCorrect
 
 datafix_correct = DFCorrect()
-datafix_correct.fit_transform(reference, query)
 ```
+
+The `fit_transform()` method can be used to correct the corrupted features detected by DF-Locate. The inputs to the function are the reference dataset, the query dataset, and the ***mask*** of corrupted features computed by DF-Locate, where 1 indicates a variable is corrupted and 0 indicates it is not. The output is the query dataset with the corrected values for the previously corrupted features.
+
+```python
+query_corrected = datafix_correct.fit_transform(reference, query, mask)
+```
+
+## Demo
+
+To see an example of how to run DataFix, please refer to the demo notebook available [here](https://github.com/AI-sandbox/DataFix/blob/master/demo.ipynb).
 
 ## License
 

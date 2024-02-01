@@ -21,8 +21,6 @@ class DFCorrect:
     
     Parameters
     ----------
-    num_corrupted_feats : int
-        Total number of corrupted features.
     base_classifier : object, default=CatBoostClassifier(verbose=False, random_state=0)
         The base classifier used as discriminator.
     batch_size : int, default=5000
@@ -43,19 +41,22 @@ class DFCorrect:
     """
     def __init__(
         self,
-        num_corrupted_feats,
         base_classifier=CatBoostClassifier(verbose=False, random_state=0),
         batch_size=5000,
         max_dims=None,
         num_epochs=1,
+        random_seed=0,
         verbose=False
     ):
         self.base_classifier = base_classifier
-        self.num_corrupted_feats = num_corrupted_feats
         self.batch_size = batch_size
         self.max_dims = max_dims
         self.num_epochs = num_epochs
+        self.random_seed = random_seed
         self.verbose = verbose
+        
+        np.random.seed(random_seed)
+        
 
     def copy(self):
         """
@@ -63,7 +64,7 @@ class DFCorrect:
         """
         return copy.deepcopy(self)
 
-    def fit_transform(self, reference, query):
+    def fit_transform(self, reference, query, mask):
         """
         Parameters
         ----------
@@ -72,8 +73,17 @@ class DFCorrect:
         query : array-like
             The query dataset might contain some partially or completely corrupted features.
             It must contain the same features as the reference appearing in the same order.
-            The first `num_corrupted_feats` must correspond to the corrupted features detected by `DFLocate`.
+        mask : array of shape (n_features_in_,)
+            The mask of corrupted features, where 1 indicates a variable is
+            corrupted and 0 otherwise.
         """
+        self.num_corrupted_feats = sum(mask)
+        self.query_original_sorted = query.copy()
+        
+        query = np.concatenate([query[:,mask==1], query[:,mask==0]], axis=1)
+        reference = np.concatenate([reference[:,mask==1], reference[:,mask==0]], axis=1)
+        
+        self.mask = mask
         self.query_original = query.copy()
 
         if reference.shape[0] > 15000:
@@ -121,9 +131,13 @@ class DFCorrect:
                 query[:, :self.num_corrupted_feats] = query_imputed[
                     :, :self.num_corrupted_feats
                 ]
-                return query
+                query_sorted = self.query_original_sorted.copy()
+                query_sorted[:, mask==1] = query[:, :self.num_corrupted_feats]
+                return query_sorted
             else:
-                return query_imputed
+                query_sorted = self.query_original_sorted.copy()
+                query_sorted[:, mask==1] = query_imputed[:, :self.num_corrupted_feats]
+                return query_sorted
         else:
             # Permute reference samples
             perm_indices = np.random.permutation(self.reference.shape[0])
@@ -156,9 +170,13 @@ class DFCorrect:
                 query[:, : self.num_corrupted_feats] = self.query[
                     :, : self.num_corrupted_feats
                 ]
-                return query
+                query_sorted = self.query_original_sorted.copy()
+                query_sorted[:, mask==1] = query[:, :self.num_corrupted_feats]
+                return query_sorted
             else:
-                return self.query
+                query_sorted = self.query_original_sorted.copy()
+                query_sorted[:, mask==1] = self.query[:, :self.num_corrupted_feats]
+                return query_sorted
 
 
 class AdversarialIterativePerSampleImputer:
@@ -186,6 +204,7 @@ class AdversarialIterativePerSampleImputer:
         self.reference = reference
         self.query = query
         self.query_original = query.copy()
+        self.num_query_samples = query.shape[0]
         self.num_corrupted_feats = num_corrupted_feats
         self.num_epochs = num_epochs
         self.verbose = verbose
@@ -274,7 +293,27 @@ class AdversarialIterativePerSampleImputer:
             que_imputed = imputer.transform(que_missing.copy())
             self.imputed_query_list.append(que_imputed)
         return self.imputed_query_list
+    
+    def extend_or_sample_reference(self, reference):
+        """
+        Extends or samples the reference data to match the desired number of query samples.
+        """    
+        if self.num_query_samples > len(reference):
+            # Calculate the number of additional samples needed
+            additional_samples = self.num_query_samples - len(reference)
 
+            # Randomly sample rows from the reference to extend it
+            random_indices = np.random.choice(len(reference), additional_samples)
+            additional_reference_samples = reference[random_indices, :]
+
+            # Extend the reference by appending the additional samples
+            reference = np.vstack([reference, additional_reference_samples])
+        elif self.num_query_samples < len(reference):
+            # If there are more reference samples than needed, truncate the reference
+            reference = reference[:self.num_query_samples, :]
+
+        return reference
+    
     def get_initial_proposals(self):
         """
         (warmup) Obtain initial proposals for the warmup imputation process.
@@ -282,8 +321,9 @@ class AdversarialIterativePerSampleImputer:
         imputers are used to generate the proposals.
         """
         proposals = []
+        
         # Add reference as initial proposal
-        proposals.append(self._add_proposal_inside_query(self.reference.copy()))
+        proposals.append(self._add_proposal_inside_query(self.extend_or_sample_reference(self.reference.copy())))
 
         for proposal in self.imputed_query_list:
             # Add each proposal inside query obtained with a different imputer
@@ -302,7 +342,7 @@ class AdversarialIterativePerSampleImputer:
         """
         proposals = []
         # Add reference as iteration proposal
-        proposals.append(self._add_proposal_inside_query(self.reference.copy()))
+        proposals.append(self._add_proposal_inside_query(self.extend_or_sample_reference(self.reference.copy())))
 
         # Generate random permutations of the reference for each corrupted feature
         ref_perm = self.reference.copy()
@@ -311,7 +351,7 @@ class AdversarialIterativePerSampleImputer:
             ref_perm[:, jj] = ref_perm[randperm, jj]
         
         # Add random permutations of the reference as iteration proposals
-        proposals.append(self._add_proposal_inside_query(ref_perm))
+        proposals.append(self._add_proposal_inside_query(self.extend_or_sample_reference(ref_perm)))
         proposals.append(
             self._add_proposal_inside_query(self.imputed_query_list[0])
         ) # We only add from linear regression imputation
